@@ -228,15 +228,15 @@ input {
   box-shadow: 0 18px 35px rgba(39, 37, 56, 0.12);
 }
 
-.tm-kiegan {
+.tm-kian {
   background: #f3cb59;
 }
 
-.tm-levi {
+.tm-malachi {
   background: #beddd4;
 }
 
-.tm-will {
+.tm-lucas {
   background: #efaa91;
 }
 
@@ -515,7 +515,7 @@ input {
   }
 }
 /* =========================================================
-   TEAM MILLER — CHILD MISSION BOARDS
+   TEAM MILLS — CHILD MISSION BOARDS
    ========================================================= */
 
 .child-board {
@@ -535,19 +535,19 @@ input {
 
 /* Individual child colors */
 
-.child-kiegan {
+.child-kian {
   --accent: #f3cb59;
   --accent-soft: #fae8a8;
   --accent-dark: #9c8138;
 }
 
-.child-levi {
+.child-malachi {
   --accent: #beddd4;
   --accent-soft: #e0eee9;
   --accent-dark: #47766c;
 }
 
-.child-will {
+.child-lucas {
   --accent: #efaa91;
   --accent-soft: #f8d5c8;
   --accent-dark: #a65f49;
