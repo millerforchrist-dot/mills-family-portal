@@ -28,6 +28,16 @@ const CHILD_CONFIG = {
 };
 
 const LAUNDRY_STEPS = ['Wash', 'Dry', 'Fold', 'Put Away'];
+const LAUNDRY_DAYS = [
+  { value: 1, label: 'Monday' }, { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' }, { value: 4, label: 'Thursday' },
+  { value: 5, label: 'Friday' }, { value: 6, label: 'Saturday' },
+  { value: 7, label: 'Sunday' }
+];
+function laundryDayName(weekday) {
+  return LAUNDRY_DAYS.find(day => day.value === Number(weekday))?.label || 'Laundry Day';
+}
+function jsWeekdayToScheduleDay(jsDay) { return jsDay === 0 ? 7 : jsDay; }
 
 const WEEKLY_TASKS = [
   'Bathrooms',
@@ -277,13 +287,10 @@ function App() {
 function ChildDashboard({ user, onLogout }) {
   const config = CHILD_CONFIG[user.name] || CHILD_CONFIG.Kian;
   const todayDay = new Date().getDay();
-  const assignedLaundryDay = {
-    Kian: 1,
-    Malachi: 2,
-    Lucas: 3
-  }[user.name];
-  const regularLaundryAvailable =
-    todayDay === assignedLaundryDay || todayDay === 4;
+  const todayScheduleDay = jsWeekdayToScheduleDay(todayDay);
+  const [assignedLaundryDay, setAssignedLaundryDay] = useState(null);
+  const assignedLaundryDayName = assignedLaundryDay ? laundryDayName(assignedLaundryDay) : config.laundryDay;
+  const regularLaundryAvailable = assignedLaundryDay !== null && todayScheduleDay === assignedLaundryDay;
   const fridayLaundryAvailable = todayDay === 5;
 
   const [missions, setMissions] = useState([]);
@@ -363,7 +370,8 @@ function ChildDashboard({ user, onLogout }) {
       readingPointsResult,
       readingSpendingResult,
       readingHistoryResult,
-      activityResult
+      activityResult,
+      laundryScheduleResult
     ] = await Promise.all([
       supabase
         .from('daily_missions')
@@ -436,7 +444,9 @@ function ChildDashboard({ user, onLogout }) {
         .select('id,amount,source_type,description,created_at')
         .eq('child_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(12)
+        .limit(12),
+
+      supabase.from('laundry_schedule').select('weekday').eq('child_id', user.id).maybeSingle()
     ]);
 
     if (
@@ -471,6 +481,13 @@ function ChildDashboard({ user, onLogout }) {
       setLaundryCompleted(
         (laundryResult.data || []).map(item => item.step_name)
       );
+    }
+
+    if (laundryScheduleResult.error) {
+      console.error(laundryScheduleResult.error);
+      setLaundryError('Could not load laundry schedule.');
+    } else {
+      setAssignedLaundryDay(laundryScheduleResult.data?.weekday ? Number(laundryScheduleResult.data.weekday) : null);
     }
 
     if (weeklyResult.error) {
@@ -578,7 +595,7 @@ function ChildDashboard({ user, onLogout }) {
       console.error(error);
 
       if (error.message?.includes('not your laundry day')) {
-        setLaundryError(`Laundry can be checked on ${config.laundryDay}.`);
+        setLaundryError(`Laundry can be checked on ${assignedLaundryDayName}.`);
       } else {
         setLaundryError('That laundry step could not be updated.');
       }
@@ -1004,7 +1021,7 @@ function ChildDashboard({ user, onLogout }) {
               <Shirt size={23} />
               <div>
                 <small>LAUNDRY DAY</small>
-                <h3>{config.laundryDay}</h3>
+                <h3>{assignedLaundryDayName}</h3>
               </div>
             </div>
 
@@ -1050,12 +1067,10 @@ function ChildDashboard({ user, onLogout }) {
             <div className="laundry-note">
               <Clock size={17} />
               {!regularLaundryAvailable
-                ? `Available ${config.laundryDay} or Thursday Catch-Up Day`
+                ? `Available ${assignedLaundryDayName}`
                 : laundryCompleted.length === 4
                   ? 'Ready for parent approval!'
-                  : todayDay === 4
-                    ? `${laundryCompleted.length} of 4 steps complete • Catch-Up Day`
-                    : `${laundryCompleted.length} of 4 steps complete`}
+                  : `${laundryCompleted.length} of 4 steps complete`}
             </div>
           </div>
 
@@ -1667,6 +1682,8 @@ function ParentDashboard({ onLogout }) {
   const [quizImportSuccess, setQuizImportSuccess] = useState('');
   const [features, setFeatures] = useState({});
   const [savingFeature, setSavingFeature] = useState('');
+  const [laundrySchedule, setLaundrySchedule] = useState({});
+  const [savingLaundrySchedule, setSavingLaundrySchedule] = useState(null);
 
   useEffect(() => {
     loadParentDashboard();
@@ -1704,7 +1721,8 @@ function ParentDashboard({ onLogout }) {
       libraryResult,
       readingAttemptsResult,
       activityTransactionsResult,
-      excusedDaysResult
+      excusedDaysResult,
+      laundryScheduleResult
     ] = await Promise.all([
       supabase
         .from('profiles')
@@ -1775,7 +1793,9 @@ function ParentDashboard({ onLogout }) {
         .from('chore_excused_days')
         .select('id,child_id,excused_date,reason,created_at')
         .order('excused_date', { ascending: false })
-        .limit(30)
+        .limit(30),
+
+      supabase.from('laundry_schedule').select('child_id,weekday')
     ]);
 
     if (
@@ -1791,7 +1811,8 @@ function ParentDashboard({ onLogout }) {
       libraryResult.error ||
       readingAttemptsResult.error ||
       activityTransactionsResult.error ||
-      excusedDaysResult.error
+      excusedDaysResult.error ||
+      laundryScheduleResult.error
     ) {
       console.error(
         profilesResult.error,
@@ -1806,7 +1827,8 @@ function ParentDashboard({ onLogout }) {
         libraryResult.error,
         readingAttemptsResult.error,
         activityTransactionsResult.error,
-        excusedDaysResult.error
+        excusedDaysResult.error,
+        laundryScheduleResult.error
       );
 
       setError('Could not load the Parent Dashboard.');
@@ -1836,6 +1858,9 @@ function ParentDashboard({ onLogout }) {
     setReadingAttempts(readingAttemptsResult.data || []);
     setActivityTransactions(activityTransactionsResult.data || []);
     setExcusedDays(excusedDaysResult.data || []);
+    setLaundrySchedule(Object.fromEntries(
+      (laundryScheduleResult.data || []).map(item => [item.child_id, Number(item.weekday)])
+    ));
 
     const totals = {};
 
@@ -1906,6 +1931,25 @@ function ParentDashboard({ onLogout }) {
 
     setFeatures(current => ({ ...current, [featureKey]: newValue }));
     setSavingFeature('');
+  }
+
+  async function changeLaundryDay(childId, weekday) {
+    if (savingLaundrySchedule) return;
+    setSavingLaundrySchedule(childId);
+    setError('');
+    const numericWeekday = Number(weekday);
+    const { error: scheduleError } = await supabase.from('laundry_schedule').upsert(
+      { child_id: childId, weekday: numericWeekday, updated_at: new Date().toISOString() },
+      { onConflict: 'child_id' }
+    );
+    if (scheduleError) {
+      console.error(scheduleError);
+      setError('Laundry day could not be changed.');
+      setSavingLaundrySchedule(null);
+      return;
+    }
+    setLaundrySchedule(current => ({ ...current, [childId]: numericWeekday }));
+    setSavingLaundrySchedule(null);
   }
 
   async function approveLaundry(childId, laundryDate) {
@@ -2522,6 +2566,36 @@ function ParentDashboard({ onLogout }) {
             </div>
           </div>
         </div>
+
+        {features.laundry !== false && (
+          <>
+            <div className="section-heading">
+              <div><span>FAMILY SETTINGS</span><h2>Laundry Schedule</h2></div>
+              <Shirt size={24} />
+            </div>
+            <div className="weekly-placeholder" style={{ alignItems: 'flex-start', marginBottom: '28px' }}>
+              <div className="weekly-icon"><Shirt size={25} /></div>
+              <div style={{ width: '100%' }}>
+                <small>CHOOSE EACH CHILD'S LAUNDRY DAY</small>
+                <strong>Weekly Laundry Schedule</strong>
+                <p>Choose the regular day each child can complete Wash, Dry, Fold, and Put Away.</p>
+                <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+                  {children.map(child => (
+                    <div key={child.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1fr) minmax(180px, 1fr)', gap: '12px', alignItems: 'center', padding: '11px 13px', borderRadius: '10px', background: 'white', border: '1px solid rgba(36,35,66,.12)' }}>
+                      <strong>{child.name}</strong>
+                      <select value={laundrySchedule[child.id] || ''} disabled={Boolean(savingLaundrySchedule)}
+                        onChange={e => changeLaundryDay(child.id, e.target.value)}
+                        style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.15)', background: 'white', fontWeight: 700 }}>
+                        <option value="" disabled>Choose a day...</option>
+                        {LAUNDRY_DAYS.map(day => <option key={day.value} value={day.value}>{day.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="section-heading">
           <div>
