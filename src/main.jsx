@@ -22,9 +22,9 @@ import { supabase } from './supabase';
 import './style.css';
 
 const CHILD_CONFIG = {
-  Kiegan: { className: 'kiegan', laundryDay: 'Monday', initial: 'K' },
-  Levi: { className: 'levi', laundryDay: 'Tuesday', initial: 'L' },
-  Will: { className: 'will', laundryDay: 'Wednesday', initial: 'W' }
+  Kian: { className: 'kian', laundryDay: 'Monday', initial: 'K' },
+  Malachi: { className: 'malachi', laundryDay: 'Tuesday', initial: 'M' },
+  Lucas: { className: 'lucas', laundryDay: 'Wednesday', initial: 'L' }
 };
 
 const LAUNDRY_STEPS = ['Wash', 'Dry', 'Fold', 'Put Away'];
@@ -115,7 +115,7 @@ function App() {
 
     if (error) {
       console.error(error);
-      setLoginError('Could not connect to TEAM MILLER.');
+      setLoginError('Could not connect to TEAM MILLS.');
     } else {
       setProfiles(data || []);
     }
@@ -191,7 +191,7 @@ function App() {
     return <ParentDashboard onLogout={logout} />;
   }
 
-  const children = ['Kiegan', 'Levi', 'Will']
+  const children = ['Kian', 'Malachi', 'Lucas']
     .map(name => profiles.find(profile => profile.name === name))
     .filter(Boolean);
 
@@ -234,7 +234,7 @@ function App() {
 
       <section className="tm-profile-section">
         {loading ? (
-          <p>Loading TEAM MILLER...</p>
+          <p>Loading TEAM MILLS...</p>
         ) : (
           <div className="tm-profile-grid">
             {children.map(profile => (
@@ -275,12 +275,12 @@ function App() {
 }
 
 function ChildDashboard({ user, onLogout }) {
-  const config = CHILD_CONFIG[user.name] || CHILD_CONFIG.Kiegan;
+  const config = CHILD_CONFIG[user.name] || CHILD_CONFIG.Kian;
   const todayDay = new Date().getDay();
   const assignedLaundryDay = {
-    Kiegan: 1,
-    Levi: 2,
-    Will: 3
+    Kian: 1,
+    Malachi: 2,
+    Lucas: 3
   }[user.name];
   const regularLaundryAvailable =
     todayDay === assignedLaundryDay || todayDay === 4;
@@ -988,7 +988,7 @@ function ChildDashboard({ user, onLogout }) {
                   </small>
                   <strong>{assignment.task_name}</strong>
                   <p>
-                    Help TEAM MILLER by taking care of your job this week.
+                    Help TEAM MILLS by taking care of your job this week.
                   </p>
                 </div>
               </div>
@@ -1070,7 +1070,7 @@ function ChildDashboard({ user, onLogout }) {
 
             <p>
               Take care of your own bedding on Friday. Towels are shared —
-              the first brother to claim them gets the task.
+              the first child to claim them gets the task.
             </p>
 
             <div className="laundry-steps">
@@ -2449,7 +2449,7 @@ function ParentDashboard({ onLogout }) {
       <section className="tm-dashboard-welcome">
         <div className="tm-eyebrow">
           <Sparkles size={18} />
-          TEAM MILLER
+          TEAM MILLS
         </div>
 
         <h1>
@@ -2741,7 +2741,7 @@ function ParentDashboard({ onLogout }) {
                     <Trophy size={25} />
                   </div>
                   <div style={{ width: '100%' }}>
-                    <small>TEAM MILLER PROGRESS</small>
+                    <small>TEAM MILLS PROGRESS</small>
                     <strong>{child.name}</strong>
 
                     <div
@@ -2883,7 +2883,7 @@ function ParentDashboard({ onLogout }) {
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <small>TEAM MILLER LIBRARY</small>
+              <small>TEAM MILLS LIBRARY</small>
               <strong>Books With Quizzes</strong>
               <p style={{ marginBottom: 0 }}>
                 {libraryBooks.length} {libraryBooks.length === 1 ? 'book' : 'books'} available
@@ -2937,11 +2937,11 @@ function ParentDashboard({ onLogout }) {
           </div>
 
           <div style={{ width: '100%', minWidth: 0 }}>
-            <small>ADD A TEAM MILLER QUIZ</small>
+            <small>ADD A TEAM MILLS QUIZ</small>
             <strong>Add a Book & Quiz</strong>
             <p>
               Paste the simple quiz text from ChatGPT. Put an * after the correct
-              answer, preview it, then add it to the boys' Reading Challenge.
+              answer, preview it, then add it to the kids' Reading Challenge.
             </p>
 
             <textarea
@@ -3256,7 +3256,7 @@ Continue through question 10...`}
             <div>
               <small>ALL CAUGHT UP</small>
               <strong>No Bonus Missions waiting</strong>
-              <p>New submissions from the boys will appear here.</p>
+              <p>New submissions from the kids will appear here.</p>
             </div>
           </div>
         ) : (
@@ -3377,7 +3377,7 @@ Continue through question 10...`}
               <small>ALL CAUGHT UP</small>
               <strong>No laundry waiting for approval</strong>
               <p>
-                When one of the boys completes all four laundry steps, it
+                When one of the kids completes all four laundry steps, it
                 will appear here.
               </p>
             </div>
@@ -3709,7 +3709,7 @@ function Brand() {
       <div className="tm-brand-mark">M</div>
       <div className="tm-brand-words">
         <span>TEAM</span>
-        <strong>Miller</strong>
+        <strong>Mills</strong>
       </div>
     </div>
   );
