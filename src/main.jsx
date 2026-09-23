@@ -39,13 +39,6 @@ function laundryDayName(weekday) {
 }
 function jsWeekdayToScheduleDay(jsDay) { return jsDay === 0 ? 7 : jsDay; }
 
-const WEEKLY_TASKS = [
-  'Bathrooms',
-  'Dishes',
-  'Trash & Wipe Counters',
-  'Wipe Table'
-];
-
 const BONUS_CATEGORIES = [
   'Bible Reading',
   'Prayer',
@@ -1942,11 +1935,17 @@ function ParentDashboard({ onLogout }) {
 
     setChildReadingPoints(readingTotals);
 
-    const sortedAssignments = WEEKLY_TASKS.map(task =>
-      (weeklyResult.data || []).find(
-        assignment => assignment.task_name === task
+    const activeWeeklyTasks = (weeklyTaskSettingsResult.data || [])
+      .filter(task => task.active !== false)
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+
+    const sortedAssignments = activeWeeklyTasks
+      .map(task =>
+        (weeklyResult.data || []).find(
+          assignment => assignment.task_name === task.name
+        )
       )
-    ).filter(Boolean);
+      .filter(Boolean);
 
     setWeeklyAssignments(sortedAssignments);
     setLoading(false);
@@ -3132,41 +3131,185 @@ function ParentDashboard({ onLogout }) {
         {features.weekly_assignments !== false && (
           <>
             <div className="section-heading">
-              <div><span>FAMILY SETTINGS</span><h2>Team Assignment Jobs</h2></div>
+              <div>
+                <span>THIS WEEK</span>
+                <h2>Team Assignments</h2>
+              </div>
               <RotateCcw size={24} />
             </div>
+
             <div className="weekly-placeholder" style={{ alignItems: 'flex-start', marginBottom: '28px' }}>
               <div style={{ width: '100%' }}>
-                <small>CUSTOMIZE WEEKLY JOBS</small>
-                <strong>Choose the jobs your family rotates each week</strong>
-                <p>Add, rename, or permanently delete Team Assignments. Active jobs automatically join the weekly rotation.</p>
+                <small>CUSTOMIZE & ASSIGN</small>
+                <strong>Choose the jobs and who is responsible this week</strong>
+                <p>
+                  Jobs rotate automatically each week. You can add, rename, delete,
+                  or temporarily assign a job to a different child.
+                </p>
 
-                <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
-                  {weeklyTaskSettings.map(task => (
-                    <div key={task.id} style={{ padding: '13px', borderRadius: '10px', background: 'white', border: '1px solid rgba(36,35,66,.12)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <strong>{task.name}</strong>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button type="button" className="tm-small-button" onClick={() => beginWeeklyTaskEdit(task)} disabled={savingWeeklyTask}>Edit</button>
-                          <button type="button" className="tm-small-button" onClick={() => deleteWeeklyTask(task)} disabled={savingWeeklyTask}>Delete</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {loading ? (
+                  <p>Loading assignments...</p>
+                ) : (
+                  <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+                    {weeklyTaskSettings
+                      .filter(task => task.active !== false)
+                      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+                      .map(task => {
+                        const assignment = weeklyAssignments.find(
+                          item => item.task_name === task.name
+                        );
 
-                <button type="button" className="tm-primary-button" onClick={() => beginWeeklyTaskEdit()} disabled={savingWeeklyTask} style={{ marginTop: '14px' }}>
+                        return (
+                          <div
+                            key={task.id}
+                            style={{
+                              padding: '13px',
+                              borderRadius: '10px',
+                              background: 'white',
+                              border: '1px solid rgba(36,35,66,.12)'
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                alignItems: 'center',
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <strong>{task.name}</strong>
+
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  flexWrap: 'wrap'
+                                }}
+                              >
+                                {assignment ? (
+                                  <>
+                                    <select
+                                      value={assignment.child_id}
+                                      disabled={Boolean(savingAssignment)}
+                                      onChange={e =>
+                                        changeAssignment(task.name, e.target.value)
+                                      }
+                                      style={{
+                                        padding: '10px 12px',
+                                        borderRadius: '10px',
+                                        border: '1px solid rgba(36,35,66,.15)',
+                                        background: 'white',
+                                        fontWeight: 700
+                                      }}
+                                    >
+                                      {children.map(child => (
+                                        <option key={child.id} value={child.id}>
+                                          {child.name}
+                                        </option>
+                                      ))}
+                                    </select>
+
+                                    {assignment.is_override && (
+                                      <button
+                                        type="button"
+                                        className="tm-small-button"
+                                        disabled={Boolean(savingAssignment)}
+                                        onClick={() => restoreAssignment(task.name)}
+                                      >
+                                        Restore Automatic
+                                      </button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: '13px', opacity: 0.65 }}>
+                                    Creating assignment...
+                                  </span>
+                                )}
+
+                                <button
+                                  type="button"
+                                  className="tm-small-button"
+                                  onClick={() => beginWeeklyTaskEdit(task)}
+                                  disabled={savingWeeklyTask}
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="tm-small-button"
+                                  onClick={() => deleteWeeklyTask(task)}
+                                  disabled={savingWeeklyTask}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="tm-primary-button"
+                  onClick={() => beginWeeklyTaskEdit()}
+                  disabled={savingWeeklyTask}
+                  style={{ marginTop: '14px' }}
+                >
                   + Add Team Assignment
                 </button>
 
                 {editingWeeklyTask && (
-                  <div id="weekly-task-editor" style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid rgba(36,35,66,.14)' }}>
-                    <strong>{editingWeeklyTask === 'new' ? 'Add Team Assignment' : 'Edit Team Assignment'}</strong>
+                  <div
+                    id="weekly-task-editor"
+                    style={{
+                      marginTop: '16px',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      background: 'white',
+                      border: '1px solid rgba(36,35,66,.14)'
+                    }}
+                  >
+                    <strong>
+                      {editingWeeklyTask === 'new'
+                        ? 'Add Team Assignment'
+                        : 'Edit Team Assignment'}
+                    </strong>
+
                     <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
-                      <input value={weeklyTaskName} onChange={e => setWeeklyTaskName(e.target.value)} placeholder="Assignment name" style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
+                      <input
+                        value={weeklyTaskName}
+                        onChange={e => setWeeklyTaskName(e.target.value)}
+                        placeholder="Assignment name"
+                        style={{
+                          padding: '11px 12px',
+                          borderRadius: '10px',
+                          border: '1px solid rgba(36,35,66,.18)'
+                        }}
+                      />
+
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        <button type="button" className="tm-primary-button" onClick={saveWeeklyTask} disabled={savingWeeklyTask}>{savingWeeklyTask ? 'Saving...' : 'Save Assignment'}</button>
-                        <button type="button" className="tm-small-button" onClick={cancelWeeklyTaskEdit} disabled={savingWeeklyTask}>Cancel</button>
+                        <button
+                          type="button"
+                          className="tm-primary-button"
+                          onClick={saveWeeklyTask}
+                          disabled={savingWeeklyTask}
+                        >
+                          {savingWeeklyTask ? 'Saving...' : 'Save Assignment'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="tm-small-button"
+                          onClick={cancelWeeklyTaskEdit}
+                          disabled={savingWeeklyTask}
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -3174,82 +3317,6 @@ function ParentDashboard({ onLogout }) {
               </div>
             </div>
           </>
-        )}
-
-        <div className="section-heading">
-          <div>
-            <span>THIS WEEK</span>
-            <h2>Team Assignments</h2>
-          </div>
-          <RotateCcw size={24} />
-        </div>
-
-        {loading ? (
-          <p>Loading assignments...</p>
-        ) : (
-          <div className="mission-list">
-            {weeklyAssignments.map(assignment => (
-              <div className="mission-row" key={assignment.id}>
-                <div className="mission-checkbox">
-                  <Heart size={18} />
-                </div>
-
-                <span>
-                  <strong>{assignment.task_name}</strong>
-                </span>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px'
-                  }}
-                >
-                  <select
-                    value={assignment.child_id}
-                    disabled={Boolean(savingAssignment)}
-                    onChange={e =>
-                      changeAssignment(
-                        assignment.task_name,
-                        e.target.value
-                      )
-                    }
-                    style={{
-                      padding: '10px 12px',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(36,35,66,.15)',
-                      background: 'white',
-                      fontWeight: 700
-                    }}
-                  >
-                    {children.map(child => (
-                      <option key={child.id} value={child.id}>
-                        {child.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {assignment.is_override && (
-                    <button
-                      type="button"
-                      disabled={Boolean(savingAssignment)}
-                      onClick={() =>
-                        restoreAssignment(assignment.task_name)
-                      }
-                      style={{
-                        border: 0,
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        fontWeight: 700
-                      }}
-                    >
-                      Restore Automatic
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
         )}
 
         <div className="section-heading lower-heading">
