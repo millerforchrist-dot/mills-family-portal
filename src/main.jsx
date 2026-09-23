@@ -1682,6 +1682,11 @@ function ParentDashboard({ onLogout }) {
   const [quizImportError, setQuizImportError] = useState('');
   const [importingQuiz, setImportingQuiz] = useState(false);
   const [quizImportSuccess, setQuizImportSuccess] = useState('');
+  const [quizCreateMode, setQuizCreateMode] = useState('manual');
+  const [aiBookTitle, setAiBookTitle] = useState('');
+  const [aiBookAuthor, setAiBookAuthor] = useState('');
+  const [aiMaxPoints, setAiMaxPoints] = useState('10');
+  const [aiPromptCopied, setAiPromptCopied] = useState(false);
   const [features, setFeatures] = useState({});
   const [savingFeature, setSavingFeature] = useState('');
   const [laundrySchedule, setLaundrySchedule] = useState({});
@@ -2373,6 +2378,52 @@ function ParentDashboard({ onLogout }) {
     }
 
     await loadParentDashboard();
+  }
+
+  function getAiQuizPrompt() {
+    const title = aiBookTitle.trim() || '[BOOK TITLE]';
+    const author = aiBookAuthor.trim() || '[AUTHOR]';
+    const points = aiMaxPoints.trim() || '10';
+
+    return `Create a reading-comprehension quiz for ${title} by ${author}.
+
+Use exactly 10 multiple-choice questions. Each question must have exactly four choices labeled A, B, C, and D, with exactly one correct answer. Put an asterisk (*) at the END of the correct answer. Use questions that test whether the child actually read and understood the book. Do not include explanations or anything outside this exact format. If you are unsure about a factual detail from the book, do not invent it.
+
+TITLE: ${title}
+AUTHOR: ${author}
+READING LEVEL:
+MAX POINTS: ${points}
+
+1. Question
+A. Answer
+B. Answer *
+C. Answer
+D. Answer
+
+Continue through question 10 using the same format.`;
+  }
+
+  async function copyAiQuizPrompt() {
+    try {
+      await navigator.clipboard.writeText(getAiQuizPrompt());
+      setAiPromptCopied(true);
+      setTimeout(() => setAiPromptCopied(false), 2000);
+    } catch (copyError) {
+      console.error(copyError);
+      setQuizImportError('Could not copy automatically. Select and copy the prompt below.');
+    }
+  }
+
+  function loadManualQuizTemplate() {
+    const questions = Array.from({ length: 10 }, (_, index) => `${index + 1}. 
+A. 
+B. 
+C. 
+D. `).join('\n\n');
+    setQuizImportText(`TITLE: \nAUTHOR: \nREADING LEVEL: \nMAX POINTS: 10\n\n${questions}`);
+    setQuizImportPreview(null);
+    setQuizImportError('');
+    setQuizImportSuccess('');
   }
 
   function previewQuizImport() {
@@ -3406,9 +3457,58 @@ function ParentDashboard({ onLogout }) {
             <small>ADD A TEAM MILLS QUIZ</small>
             <strong>Add a Book & Quiz</strong>
             <p>
-              Paste the simple quiz text from ChatGPT. Put an * after the correct
-              answer, preview it, then add it to the kids' Reading Challenge.
+              Write the quiz yourself, or let an AI assistant help create it.
+              Either way, you review it before it is added to the Reading Challenge.
             </p>
+
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '12px 0' }}>
+              <button
+                type="button"
+                className="tm-pin-submit"
+                onClick={() => { setQuizCreateMode('manual'); setQuizImportError(''); }}
+                style={{ width: 'auto', padding: '10px 16px', opacity: quizCreateMode === 'manual' ? 1 : .65 }}
+              >
+                Create Manually
+              </button>
+              <button
+                type="button"
+                className="tm-pin-submit"
+                onClick={() => { setQuizCreateMode('ai'); setQuizImportError(''); }}
+                style={{ width: 'auto', padding: '10px 16px', opacity: quizCreateMode === 'ai' ? 1 : .65 }}
+              >
+                Use AI to Help
+              </button>
+            </div>
+
+            {quizCreateMode === 'manual' ? (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  Fill in the book information and 10 questions below. Put an * after the correct answer.
+                </p>
+                {!quizImportText.trim() && (
+                  <button type="button" className="tm-pin-submit" onClick={loadManualQuizTemplate} style={{ width: 'auto', padding: '9px 15px', marginBottom: '10px' }}>
+                    Start Blank Quiz
+                  </button>
+                )}
+              </>
+            ) : (
+              <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,.65)', marginBottom: '12px' }}>
+                <strong style={{ display: 'block', marginBottom: '5px' }}>Use your preferred AI assistant</strong>
+                <p style={{ marginTop: 0 }}>Enter the book, copy the prompt, paste it into ChatGPT, Claude, Gemini, or another AI assistant, then paste the completed quiz back here. Review the questions for accuracy before adding it.</p>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <input value={aiBookTitle} onChange={e => setAiBookTitle(e.target.value)} placeholder="Book title" />
+                  <input value={aiBookAuthor} onChange={e => setAiBookAuthor(e.target.value)} placeholder="Author" />
+                  <input value={aiMaxPoints} onChange={e => setAiMaxPoints(e.target.value)} placeholder="Maximum Reading Points" inputMode="decimal" />
+                </div>
+                <button type="button" className="tm-pin-submit" onClick={copyAiQuizPrompt} style={{ width: 'auto', padding: '9px 15px', marginTop: '10px' }}>
+                  {aiPromptCopied ? 'Prompt Copied!' : 'Copy AI Prompt'}
+                </button>
+                <details style={{ marginTop: '10px' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 700 }}>View prompt</summary>
+                  <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '12px', background: 'white', padding: '10px', borderRadius: '9px', marginTop: '8px' }}>{getAiQuizPrompt()}</pre>
+                </details>
+              </div>
+            )}
 
             <textarea
               value={quizImportText}
@@ -3418,110 +3518,47 @@ function ParentDashboard({ onLogout }) {
                 setQuizImportError('');
                 setQuizImportSuccess('');
               }}
-              placeholder={`TITLE: Skyward
-AUTHOR: Brandon Sanderson
-READING LEVEL: HL680L
-MAX POINTS: 21
+              placeholder={quizCreateMode === 'ai' ? 'Paste the completed AI quiz here...' : `TITLE: Book Title
+AUTHOR: Author Name
+READING LEVEL:
+MAX POINTS: 10
 
-1. What does Spensa dream of becoming?
-A. A scientist
-B. A pilot *
-C. A teacher
-D. A mechanic
+1. Question
+A. Answer
+B. Correct answer *
+C. Answer
+D. Answer
 
 Continue through question 10...`}
               rows="16"
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                padding: '12px',
-                borderRadius: '10px',
-                border: '1px solid rgba(36,35,66,.15)',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                fontSize: '14px',
-                background: 'white'
-              }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.15)', resize: 'vertical', fontFamily: 'inherit', fontSize: '14px', background: 'white' }}
             />
 
-            <button
-              type="button"
-              className="tm-pin-submit"
-              disabled={!quizImportText.trim() || importingQuiz}
-              onClick={previewQuizImport}
-              style={{
-                width: 'auto',
-                marginTop: '10px',
-                padding: '10px 18px'
-              }}
-            >
+            <button type="button" className="tm-pin-submit" disabled={!quizImportText.trim() || importingQuiz} onClick={previewQuizImport} style={{ width: 'auto', marginTop: '10px', padding: '10px 18px' }}>
               <BookOpen size={17} />
               Preview Quiz
             </button>
 
-            {quizImportError && (
-              <div className="tm-login-error" style={{ marginTop: '10px' }}>
-                {quizImportError}
-              </div>
-            )}
-
-            {quizImportSuccess && (
-              <p style={{ marginTop: '12px' }}>
-                <strong>{quizImportSuccess}</strong>
-              </p>
-            )}
+            {quizImportError && <div className="tm-login-error" style={{ marginTop: '10px' }}>{quizImportError}</div>}
+            {quizImportSuccess && <p style={{ marginTop: '12px' }}><strong>{quizImportSuccess}</strong></p>}
 
             {quizImportPreview && (
-              <div
-                style={{
-                  marginTop: '16px',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  background: 'rgba(255,255,255,.65)'
-                }}
-              >
-                <small>READY TO IMPORT</small>
-                <strong style={{ display: 'block', marginTop: '4px' }}>
-                  {quizImportPreview.book.title}
-                </strong>
+              <div style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'rgba(255,255,255,.65)' }}>
+                <small>READY TO IMPORT — REVIEW BEFORE ADDING</small>
+                <strong style={{ display: 'block', marginTop: '4px' }}>{quizImportPreview.book.title}</strong>
                 <p style={{ margin: '5px 0 12px' }}>
-                  {quizImportPreview.book.author} • Level{' '}
-                  {quizImportPreview.book.reading_level || '—'} •{' '}
-                  {Number(quizImportPreview.book.maximum_points || 0).toFixed(1)}{' '}
-                  Reading Points • {quizImportPreview.questions.length} questions
+                  {quizImportPreview.book.author} • Level {quizImportPreview.book.reading_level || '—'} • {Number(quizImportPreview.book.maximum_points || 0).toFixed(1)} Reading Points • {quizImportPreview.questions.length} questions
                 </p>
-
                 <div style={{ display: 'grid', gap: '7px' }}>
                   {quizImportPreview.questions.map((question, index) => (
-                    <div
-                      key={index}
-                      style={{
-                        padding: '9px 10px',
-                        borderRadius: '9px',
-                        background: 'white',
-                        fontSize: '13px'
-                      }}
-                    >
+                    <div key={index} style={{ padding: '9px 10px', borderRadius: '9px', background: 'white', fontSize: '13px' }}>
                       <strong>{index + 1}.</strong> {question.question}
                     </div>
                   ))}
                 </div>
-
-                <button
-                  type="button"
-                  className="tm-pin-submit"
-                  disabled={importingQuiz}
-                  onClick={importQuizPackage}
-                  style={{
-                    width: 'auto',
-                    marginTop: '14px',
-                    padding: '10px 18px'
-                  }}
-                >
+                <button type="button" className="tm-pin-submit" disabled={importingQuiz} onClick={importQuizPackage} style={{ width: 'auto', marginTop: '14px', padding: '10px 18px' }}>
                   <Check size={17} />
-                  {importingQuiz
-                    ? 'Adding Quiz...'
-                    : 'Add to Reading Challenge'}
+                  {importingQuiz ? 'Adding Quiz...' : 'Add to Reading Challenge'}
                 </button>
               </div>
             )}
