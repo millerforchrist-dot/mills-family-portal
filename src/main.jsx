@@ -1971,6 +1971,15 @@ function ParentDashboard({ onLogout }) {
     setDailyMissionName(mission?.name || '');
     setDailyMissionPoints(String(mission?.point_value ?? 1));
     setDailyMissionChildIds(mission ? (dailyMissionAssignments[mission.id] || []) : children.map(child => child.id));
+
+    // The editor renders below the mission list. Scroll it into view so
+    // Edit/Add gives immediate visible feedback even on a long dashboard.
+    window.setTimeout(() => {
+      document.getElementById('daily-mission-editor')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }, 50);
   }
 
   function cancelDailyMissionEdit() {
@@ -2718,7 +2727,7 @@ function ParentDashboard({ onLogout }) {
                 </button>
 
                 {editingDailyMission && (
-                  <div style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid rgba(36,35,66,.14)' }}>
+                  <div id="daily-mission-editor" style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid rgba(36,35,66,.14)' }}>
                     <strong>{editingDailyMission === 'new' ? 'Add Daily Mission' : 'Edit Daily Mission'}</strong>
                     <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
                       <input value={dailyMissionName} onChange={e => setDailyMissionName(e.target.value)} placeholder="Mission name" style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
