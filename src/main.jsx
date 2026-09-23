@@ -1697,6 +1697,7 @@ function ParentDashboard({ onLogout }) {
   const [dailyMissionName, setDailyMissionName] = useState('');
   const [dailyMissionPoints, setDailyMissionPoints] = useState('1');
   const [dailyMissionChildIds, setDailyMissionChildIds] = useState([]);
+  const [dailyMissionPenaltyIfMissed, setDailyMissionPenaltyIfMissed] = useState(false);
   const [savingDailyMission, setSavingDailyMission] = useState(false);
   const [weeklyTaskSettings, setWeeklyTaskSettings] = useState([]);
   const [editingWeeklyTask, setEditingWeeklyTask] = useState(null);
@@ -1818,7 +1819,7 @@ function ParentDashboard({ onLogout }) {
 
       supabase.from('laundry_schedule').select('child_id,weekday'),
 
-      supabase.from('daily_missions').select('id,name,point_value,sort_order,active').order('sort_order'),
+      supabase.from('daily_missions').select('id,name,point_value,sort_order,active,penalty_if_missed').order('sort_order'),
 
       supabase.from('daily_mission_children').select('mission_id,child_id'),
 
@@ -1985,6 +1986,7 @@ function ParentDashboard({ onLogout }) {
     setDailyMissionName(mission?.name || '');
     setDailyMissionPoints(String(mission?.point_value ?? 1));
     setDailyMissionChildIds(mission ? (dailyMissionAssignments[mission.id] || []) : children.map(child => child.id));
+    setDailyMissionPenaltyIfMissed(Boolean(mission?.penalty_if_missed));
 
     // The editor renders below the mission list. Scroll it into view so
     // Edit/Add gives immediate visible feedback even on a long dashboard.
@@ -2001,6 +2003,7 @@ function ParentDashboard({ onLogout }) {
     setDailyMissionName('');
     setDailyMissionPoints('1');
     setDailyMissionChildIds([]);
+    setDailyMissionPenaltyIfMissed(false);
   }
 
   function toggleDailyMissionChild(childId) {
@@ -2034,7 +2037,8 @@ function ParentDashboard({ onLogout }) {
       p_name: dailyMissionName.trim(),
       p_point_value: points,
       p_child_ids: dailyMissionChildIds,
-      p_active: mission?.active ?? true
+      p_active: mission?.active ?? true,
+      p_penalty_if_missed: dailyMissionPenaltyIfMissed
     });
 
     if (missionError) {
@@ -2059,7 +2063,8 @@ function ParentDashboard({ onLogout }) {
       p_name: mission.name,
       p_point_value: Number(mission.point_value),
       p_child_ids: assignedChildren,
-      p_active: !mission.active
+      p_active: !mission.active,
+      p_penalty_if_missed: Boolean(mission.penalty_if_missed)
     });
     if (missionError) {
       console.error(missionError);
@@ -2846,7 +2851,7 @@ D. `).join('\n\n');
                         <div>
                           <strong>{mission.name}</strong>
                           <div style={{ fontSize: '13px', marginTop: '4px' }}>
-                            +{Number(mission.point_value)} point{Number(mission.point_value) === 1 ? '' : 's'} · {(dailyMissionAssignments[mission.id] || []).map(id => childName(id)).join(', ') || 'No children assigned'}
+                            +{Number(mission.point_value)} point{Number(mission.point_value) === 1 ? '' : 's'} · {(dailyMissionAssignments[mission.id] || []).map(id => childName(id)).join(', ') || 'No children assigned'} · Penalty if missed: {mission.penalty_if_missed ? 'ON' : 'OFF'}
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -2871,6 +2876,13 @@ D. `).join('\n\n');
                       <label style={{ display: 'grid', gap: '6px' }}>
                         <small>POINT VALUE</small>
                         <input type="number" min="0.1" step="0.1" value={dailyMissionPoints} onChange={e => setDailyMissionPoints(e.target.value)} style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
+                      </label>
+                      <label style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.14)' }}>
+                        <div>
+                          <strong>Penalty if missed</strong>
+                          <div style={{ fontSize: '12px', marginTop: '3px', opacity: .7 }}>Deduct 1 Mission Point if this assigned chore is not completed.</div>
+                        </div>
+                        <input type="checkbox" checked={dailyMissionPenaltyIfMissed} onChange={e => setDailyMissionPenaltyIfMissed(e.target.checked)} />
                       </label>
                       <div>
                         <small>ASSIGN TO</small>
