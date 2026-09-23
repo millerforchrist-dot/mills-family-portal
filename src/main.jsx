@@ -371,7 +371,8 @@ function ChildDashboard({ user, onLogout }) {
       readingSpendingResult,
       readingHistoryResult,
       activityResult,
-      laundryScheduleResult
+      laundryScheduleResult,
+      missionAssignmentsResult
     ] = await Promise.all([
       supabase
         .from('daily_missions')
@@ -446,22 +447,30 @@ function ChildDashboard({ user, onLogout }) {
         .order('created_at', { ascending: false })
         .limit(12),
 
-      supabase.from('laundry_schedule').select('weekday').eq('child_id', user.id).maybeSingle()
+      supabase.from('laundry_schedule').select('weekday').eq('child_id', user.id).maybeSingle(),
+
+      supabase
+        .from('daily_mission_children')
+        .select('mission_id')
+        .eq('child_id', user.id)
     ]);
 
     if (
       missionsResult.error ||
+      missionAssignmentsResult.error ||
       completionsResult.error ||
       pointsResult.error
     ) {
       console.error(
         missionsResult.error,
+        missionAssignmentsResult.error,
         completionsResult.error,
         pointsResult.error
       );
       setBoardError('Could not load your mission board.');
     } else {
-      setMissions(missionsResult.data || []);
+      const assignedMissionIds = new Set((missionAssignmentsResult.data || []).map(item => item.mission_id));
+      setMissions((missionsResult.data || []).filter(mission => assignedMissionIds.has(mission.id)));
       setCompletedIds(
         (completionsResult.data || []).map(item => item.mission_id)
       );
@@ -1684,6 +1693,13 @@ function ParentDashboard({ onLogout }) {
   const [savingFeature, setSavingFeature] = useState('');
   const [laundrySchedule, setLaundrySchedule] = useState({});
   const [savingLaundrySchedule, setSavingLaundrySchedule] = useState(null);
+  const [dailyMissionSettings, setDailyMissionSettings] = useState([]);
+  const [dailyMissionAssignments, setDailyMissionAssignments] = useState({});
+  const [editingDailyMission, setEditingDailyMission] = useState(null);
+  const [dailyMissionName, setDailyMissionName] = useState('');
+  const [dailyMissionPoints, setDailyMissionPoints] = useState('1');
+  const [dailyMissionChildIds, setDailyMissionChildIds] = useState([]);
+  const [savingDailyMission, setSavingDailyMission] = useState(false);
 
   useEffect(() => {
     loadParentDashboard();
@@ -1722,7 +1738,9 @@ function ParentDashboard({ onLogout }) {
       readingAttemptsResult,
       activityTransactionsResult,
       excusedDaysResult,
-      laundryScheduleResult
+      laundryScheduleResult,
+      dailyMissionsResult,
+      dailyMissionAssignmentsResult
     ] = await Promise.all([
       supabase
         .from('profiles')
@@ -1795,7 +1813,11 @@ function ParentDashboard({ onLogout }) {
         .order('excused_date', { ascending: false })
         .limit(30),
 
-      supabase.from('laundry_schedule').select('child_id,weekday')
+      supabase.from('laundry_schedule').select('child_id,weekday'),
+
+      supabase.from('daily_missions').select('id,name,point_value,sort_order,active').order('sort_order'),
+
+      supabase.from('daily_mission_children').select('mission_id,child_id')
     ]);
 
     if (
@@ -1812,7 +1834,9 @@ function ParentDashboard({ onLogout }) {
       readingAttemptsResult.error ||
       activityTransactionsResult.error ||
       excusedDaysResult.error ||
-      laundryScheduleResult.error
+      laundryScheduleResult.error ||
+      dailyMissionsResult.error ||
+      dailyMissionAssignmentsResult.error
     ) {
       console.error(
         profilesResult.error,
@@ -1828,7 +1852,9 @@ function ParentDashboard({ onLogout }) {
         readingAttemptsResult.error,
         activityTransactionsResult.error,
         excusedDaysResult.error,
-        laundryScheduleResult.error
+        laundryScheduleResult.error,
+        dailyMissionsResult.error,
+        dailyMissionAssignmentsResult.error
       );
 
       setError('Could not load the Parent Dashboard.');
@@ -1861,6 +1887,13 @@ function ParentDashboard({ onLogout }) {
     setLaundrySchedule(Object.fromEntries(
       (laundryScheduleResult.data || []).map(item => [item.child_id, Number(item.weekday)])
     ));
+    setDailyMissionSettings(dailyMissionsResult.data || []);
+    const missionAssignmentMap = {};
+    (dailyMissionAssignmentsResult.data || []).forEach(item => {
+      if (!missionAssignmentMap[item.mission_id]) missionAssignmentMap[item.mission_id] = [];
+      missionAssignmentMap[item.mission_id].push(item.child_id);
+    });
+    setDailyMissionAssignments(missionAssignmentMap);
 
     const totals = {};
 
@@ -1931,6 +1964,88 @@ function ParentDashboard({ onLogout }) {
 
     setFeatures(current => ({ ...current, [featureKey]: newValue }));
     setSavingFeature('');
+  }
+
+  function beginDailyMissionEdit(mission = null) {
+    setEditingDailyMission(mission?.id || 'new');
+    setDailyMissionName(mission?.name || '');
+    setDailyMissionPoints(String(mission?.point_value ?? 1));
+    setDailyMissionChildIds(mission ? (dailyMissionAssignments[mission.id] || []) : children.map(child => child.id));
+  }
+
+  function cancelDailyMissionEdit() {
+    setEditingDailyMission(null);
+    setDailyMissionName('');
+    setDailyMissionPoints('1');
+    setDailyMissionChildIds([]);
+  }
+
+  function toggleDailyMissionChild(childId) {
+    setDailyMissionChildIds(current =>
+      current.includes(childId)
+        ? current.filter(id => id !== childId)
+        : [...current, childId]
+    );
+  }
+
+  async function saveDailyMission() {
+    const points = Number(dailyMissionPoints);
+    if (!dailyMissionName.trim()) {
+      setError('Enter a mission name.');
+      return;
+    }
+    if (!Number.isFinite(points) || points <= 0) {
+      setError('Mission points must be greater than zero.');
+      return;
+    }
+    if (dailyMissionChildIds.length === 0) {
+      setError('Choose at least one child for this mission.');
+      return;
+    }
+
+    setSavingDailyMission(true);
+    setError('');
+    const mission = dailyMissionSettings.find(item => item.id === editingDailyMission);
+    const { error: missionError } = await supabase.rpc('parent_save_daily_mission', {
+      p_mission_id: editingDailyMission === 'new' ? null : editingDailyMission,
+      p_name: dailyMissionName.trim(),
+      p_point_value: points,
+      p_child_ids: dailyMissionChildIds,
+      p_active: mission?.active ?? true
+    });
+
+    if (missionError) {
+      console.error(missionError);
+      setError(missionError.message || 'Daily Mission could not be saved.');
+      setSavingDailyMission(false);
+      return;
+    }
+
+    cancelDailyMissionEdit();
+    await loadParentDashboard();
+    setSavingDailyMission(false);
+  }
+
+  async function toggleDailyMissionActive(mission) {
+    if (savingDailyMission) return;
+    setSavingDailyMission(true);
+    setError('');
+    const assignedChildren = dailyMissionAssignments[mission.id] || children.map(child => child.id);
+    const { error: missionError } = await supabase.rpc('parent_save_daily_mission', {
+      p_mission_id: mission.id,
+      p_name: mission.name,
+      p_point_value: Number(mission.point_value),
+      p_child_ids: assignedChildren,
+      p_active: !mission.active
+    });
+    if (missionError) {
+      console.error(missionError);
+      setError(missionError.message || 'Daily Mission could not be updated.');
+      setSavingDailyMission(false);
+      return;
+    }
+    await loadParentDashboard();
+    setSavingDailyMission(false);
   }
 
   async function changeLaundryDay(childId, weekday) {
@@ -2566,6 +2681,73 @@ function ParentDashboard({ onLogout }) {
             </div>
           </div>
         </div>
+
+        {features.daily_missions !== false && (
+          <>
+            <div className="section-heading">
+              <div><span>FAMILY SETTINGS</span><h2>Daily Missions</h2></div>
+              <Check size={24} />
+            </div>
+            <div className="weekly-placeholder" style={{ alignItems: 'flex-start', marginBottom: '28px' }}>
+              <div style={{ width: '100%' }}>
+                <small>CUSTOMIZE DAILY CHORES</small>
+                <strong>Choose what each child is responsible for</strong>
+                <p>Add missions, change names or points, choose which kids receive them, or turn a mission off.</p>
+
+                <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+                  {dailyMissionSettings.map(mission => (
+                    <div key={mission.id} style={{ padding: '13px', borderRadius: '10px', background: 'white', border: '1px solid rgba(36,35,66,.12)', opacity: mission.active ? 1 : .6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div>
+                          <strong>{mission.name}</strong>
+                          <div style={{ fontSize: '13px', marginTop: '4px' }}>
+                            +{Number(mission.point_value)} point{Number(mission.point_value) === 1 ? '' : 's'} · {(dailyMissionAssignments[mission.id] || []).map(id => childName(id)).join(', ') || 'No children assigned'}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button type="button" className="tm-small-button" onClick={() => beginDailyMissionEdit(mission)} disabled={savingDailyMission}>Edit</button>
+                          <button type="button" className="tm-small-button" onClick={() => toggleDailyMissionActive(mission)} disabled={savingDailyMission}>{mission.active ? 'Turn Off' : 'Turn On'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button type="button" className="tm-primary-button" onClick={() => beginDailyMissionEdit()} disabled={savingDailyMission} style={{ marginTop: '14px' }}>
+                  + Add Daily Mission
+                </button>
+
+                {editingDailyMission && (
+                  <div style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid rgba(36,35,66,.14)' }}>
+                    <strong>{editingDailyMission === 'new' ? 'Add Daily Mission' : 'Edit Daily Mission'}</strong>
+                    <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+                      <input value={dailyMissionName} onChange={e => setDailyMissionName(e.target.value)} placeholder="Mission name" style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
+                      <label style={{ display: 'grid', gap: '6px' }}>
+                        <small>POINT VALUE</small>
+                        <input type="number" min="0.1" step="0.1" value={dailyMissionPoints} onChange={e => setDailyMissionPoints(e.target.value)} style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
+                      </label>
+                      <div>
+                        <small>ASSIGN TO</small>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                          {children.map(child => (
+                            <label key={child.id} style={{ display: 'flex', gap: '7px', alignItems: 'center', padding: '9px 11px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.14)', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={dailyMissionChildIds.includes(child.id)} onChange={() => toggleDailyMissionChild(child.id)} />
+                              <strong>{child.name}</strong>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <button type="button" className="tm-primary-button" onClick={saveDailyMission} disabled={savingDailyMission}>{savingDailyMission ? 'Saving...' : 'Save Mission'}</button>
+                        <button type="button" className="tm-small-button" onClick={cancelDailyMissionEdit} disabled={savingDailyMission}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         {features.laundry !== false && (
           <>
