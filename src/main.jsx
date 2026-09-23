@@ -1700,6 +1700,10 @@ function ParentDashboard({ onLogout }) {
   const [dailyMissionPoints, setDailyMissionPoints] = useState('1');
   const [dailyMissionChildIds, setDailyMissionChildIds] = useState([]);
   const [savingDailyMission, setSavingDailyMission] = useState(false);
+  const [weeklyTaskSettings, setWeeklyTaskSettings] = useState([]);
+  const [editingWeeklyTask, setEditingWeeklyTask] = useState(null);
+  const [weeklyTaskName, setWeeklyTaskName] = useState('');
+  const [savingWeeklyTask, setSavingWeeklyTask] = useState(false);
 
   useEffect(() => {
     loadParentDashboard();
@@ -1740,7 +1744,8 @@ function ParentDashboard({ onLogout }) {
       excusedDaysResult,
       laundryScheduleResult,
       dailyMissionsResult,
-      dailyMissionAssignmentsResult
+      dailyMissionAssignmentsResult,
+      weeklyTaskSettingsResult
     ] = await Promise.all([
       supabase
         .from('profiles')
@@ -1817,7 +1822,9 @@ function ParentDashboard({ onLogout }) {
 
       supabase.from('daily_missions').select('id,name,point_value,sort_order,active').order('sort_order'),
 
-      supabase.from('daily_mission_children').select('mission_id,child_id')
+      supabase.from('daily_mission_children').select('mission_id,child_id'),
+
+      supabase.from('weekly_tasks_config').select('id,name,sort_order,active').order('sort_order')
     ]);
 
     if (
@@ -1836,7 +1843,8 @@ function ParentDashboard({ onLogout }) {
       excusedDaysResult.error ||
       laundryScheduleResult.error ||
       dailyMissionsResult.error ||
-      dailyMissionAssignmentsResult.error
+      dailyMissionAssignmentsResult.error ||
+      weeklyTaskSettingsResult.error
     ) {
       console.error(
         profilesResult.error,
@@ -1854,7 +1862,8 @@ function ParentDashboard({ onLogout }) {
         excusedDaysResult.error,
         laundryScheduleResult.error,
         dailyMissionsResult.error,
-        dailyMissionAssignmentsResult.error
+        dailyMissionAssignmentsResult.error,
+        weeklyTaskSettingsResult.error
       );
 
       setError('Could not load the Parent Dashboard.');
@@ -1894,6 +1903,7 @@ function ParentDashboard({ onLogout }) {
       missionAssignmentMap[item.mission_id].push(item.child_id);
     });
     setDailyMissionAssignments(missionAssignmentMap);
+    setWeeklyTaskSettings(weeklyTaskSettingsResult.data || []);
 
     const totals = {};
 
@@ -2055,6 +2065,82 @@ function ParentDashboard({ onLogout }) {
     }
     await loadParentDashboard();
     setSavingDailyMission(false);
+  }
+
+  async function deleteDailyMission(mission) {
+    if (savingDailyMission) return;
+    if (!window.confirm(`Delete “${mission.name}” permanently? This cannot be undone.`)) return;
+
+    setSavingDailyMission(true);
+    setError('');
+    const { error: missionError } = await supabase.rpc('parent_delete_daily_mission', {
+      p_mission_id: mission.id
+    });
+
+    if (missionError) {
+      console.error(missionError);
+      setError(missionError.message || 'Daily Mission could not be deleted.');
+      setSavingDailyMission(false);
+      return;
+    }
+
+    if (editingDailyMission === mission.id) cancelDailyMissionEdit();
+    await loadParentDashboard();
+    setSavingDailyMission(false);
+  }
+
+  function beginWeeklyTaskEdit(task = null) {
+    setEditingWeeklyTask(task?.id || 'new');
+    setWeeklyTaskName(task?.name || '');
+    window.setTimeout(() => {
+      document.getElementById('weekly-task-editor')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }
+
+  function cancelWeeklyTaskEdit() {
+    setEditingWeeklyTask(null);
+    setWeeklyTaskName('');
+  }
+
+  async function saveWeeklyTask() {
+    if (!weeklyTaskName.trim()) {
+      setError('Enter a Team Assignment name.');
+      return;
+    }
+    setSavingWeeklyTask(true);
+    setError('');
+    const { error: taskError } = await supabase.rpc('parent_save_weekly_task', {
+      p_task_id: editingWeeklyTask === 'new' ? null : editingWeeklyTask,
+      p_name: weeklyTaskName.trim()
+    });
+    if (taskError) {
+      console.error(taskError);
+      setError(taskError.message || 'Team Assignment could not be saved.');
+      setSavingWeeklyTask(false);
+      return;
+    }
+    cancelWeeklyTaskEdit();
+    await loadParentDashboard();
+    setSavingWeeklyTask(false);
+  }
+
+  async function deleteWeeklyTask(task) {
+    if (savingWeeklyTask) return;
+    if (!window.confirm(`Delete “${task.name}” permanently? It will be removed from the weekly rotation.`)) return;
+    setSavingWeeklyTask(true);
+    setError('');
+    const { error: taskError } = await supabase.rpc('parent_delete_weekly_task', {
+      p_task_id: task.id
+    });
+    if (taskError) {
+      console.error(taskError);
+      setError(taskError.message || 'Team Assignment could not be deleted.');
+      setSavingWeeklyTask(false);
+      return;
+    }
+    if (editingWeeklyTask === task.id) cancelWeeklyTaskEdit();
+    await loadParentDashboard();
+    setSavingWeeklyTask(false);
   }
 
   async function changeLaundryDay(childId, weekday) {
@@ -2716,6 +2802,7 @@ function ParentDashboard({ onLogout }) {
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button type="button" className="tm-small-button" onClick={() => beginDailyMissionEdit(mission)} disabled={savingDailyMission}>Edit</button>
                           <button type="button" className="tm-small-button" onClick={() => toggleDailyMissionActive(mission)} disabled={savingDailyMission}>{mission.active ? 'Turn Off' : 'Turn On'}</button>
+                          <button type="button" className="tm-small-button" onClick={() => deleteDailyMission(mission)} disabled={savingDailyMission}>Delete</button>
                         </div>
                       </div>
                     </div>
@@ -3040,6 +3127,53 @@ function ParentDashboard({ onLogout }) {
               );
             })}
           </div>
+        )}
+
+        {features.weekly_assignments !== false && (
+          <>
+            <div className="section-heading">
+              <div><span>FAMILY SETTINGS</span><h2>Team Assignment Jobs</h2></div>
+              <RotateCcw size={24} />
+            </div>
+            <div className="weekly-placeholder" style={{ alignItems: 'flex-start', marginBottom: '28px' }}>
+              <div style={{ width: '100%' }}>
+                <small>CUSTOMIZE WEEKLY JOBS</small>
+                <strong>Choose the jobs your family rotates each week</strong>
+                <p>Add, rename, or permanently delete Team Assignments. Active jobs automatically join the weekly rotation.</p>
+
+                <div style={{ display: 'grid', gap: '10px', marginTop: '14px' }}>
+                  {weeklyTaskSettings.map(task => (
+                    <div key={task.id} style={{ padding: '13px', borderRadius: '10px', background: 'white', border: '1px solid rgba(36,35,66,.12)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <strong>{task.name}</strong>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button type="button" className="tm-small-button" onClick={() => beginWeeklyTaskEdit(task)} disabled={savingWeeklyTask}>Edit</button>
+                          <button type="button" className="tm-small-button" onClick={() => deleteWeeklyTask(task)} disabled={savingWeeklyTask}>Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button type="button" className="tm-primary-button" onClick={() => beginWeeklyTaskEdit()} disabled={savingWeeklyTask} style={{ marginTop: '14px' }}>
+                  + Add Team Assignment
+                </button>
+
+                {editingWeeklyTask && (
+                  <div id="weekly-task-editor" style={{ marginTop: '16px', padding: '16px', borderRadius: '12px', background: 'white', border: '1px solid rgba(36,35,66,.14)' }}>
+                    <strong>{editingWeeklyTask === 'new' ? 'Add Team Assignment' : 'Edit Team Assignment'}</strong>
+                    <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+                      <input value={weeklyTaskName} onChange={e => setWeeklyTaskName(e.target.value)} placeholder="Assignment name" style={{ padding: '11px 12px', borderRadius: '10px', border: '1px solid rgba(36,35,66,.18)' }} />
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <button type="button" className="tm-primary-button" onClick={saveWeeklyTask} disabled={savingWeeklyTask}>{savingWeeklyTask ? 'Saving...' : 'Save Assignment'}</button>
+                        <button type="button" className="tm-small-button" onClick={cancelWeeklyTaskEdit} disabled={savingWeeklyTask}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         )}
 
         <div className="section-heading">
